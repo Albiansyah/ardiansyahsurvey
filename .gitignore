@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+.qa-*/
+ini.bat
+New Text Document.txt
+.push-repo/
+supabase/.temp/
+
