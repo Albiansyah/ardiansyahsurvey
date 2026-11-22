@@ -1,8 +1,13 @@
+import { createClient } from "@supabase/supabase-js";
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const sessionKey = "ardi-supabase-session";
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && publishableKey);
+const realtimeClient = isSupabaseConfigured
+  ? createClient(supabaseUrl, publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
+  : null;
 
 const assertConfigured = () => {
   if (!isSupabaseConfigured) throw new Error("Konfigurasi layanan data belum tersedia.");
@@ -130,6 +135,22 @@ export const restRequest = async (table, { method = "GET", query = "", body, pre
   return payload;
 };
 
+export const restRequestWithCount = async (table, { query = "", from = 0, to = 0 } = {}) => {
+  assertConfigured();
+  const response = await authorizedFetch(`${supabaseUrl}/rest/v1/${table}${query ? `?${query}` : ""}`, {
+    headers: {
+      Prefer: "count=exact",
+      Range: `${from}-${to}`,
+      "Range-Unit": "items"
+    }
+  });
+  const payload = await parseResponse(response);
+  if (!response.ok && response.status !== 206) throw errorFrom(payload, `Operasi ${table} gagal.`);
+  const contentRange = response.headers.get("content-range") || "";
+  const totalValue = contentRange.split("/")[1];
+  return { rows: Array.isArray(payload) ? payload : [], total: totalValue && totalValue !== "*" ? Number(totalValue) : 0 };
+};
+
 export const rpc = async (name, params = {}) => restRequest(`rpc/${name}`, { method: "POST", body: params });
 
 export const invokeFunction = async (name, body = {}) => {
@@ -187,5 +208,31 @@ export const withEvidenceUrls = async (reports) => Promise.all(reports.map(async
   ...report,
   evidence_url: await createEvidenceUrl(report.evidence_path)
 })));
+
+export const subscribeToReportChanges = (onChange, onStatus) => {
+  let channel = null;
+  let cancelled = false;
+  (async () => {
+    try {
+      const session = await getValidSession();
+      if (!session?.access_token || !realtimeClient || cancelled) {
+        onStatus?.("unavailable");
+        return;
+      }
+      realtimeClient.realtime.setAuth(session.access_token);
+      channel = realtimeClient
+        .channel(`survey-reports-${crypto.randomUUID()}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "survey_reports" }, onChange)
+        .subscribe((status) => onStatus?.(status));
+    } catch {
+      onStatus?.("error");
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    if (channel && realtimeClient) realtimeClient.removeChannel(channel);
+  };
+};
 
 export const supabaseProject = { url: supabaseUrl };

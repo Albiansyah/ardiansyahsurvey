@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useStore } from "../lib/store";
 import { surveyQuestions } from "../lib/dummyData";
 import { formatWibDateTime } from "../lib/format";
-import { IconAlert, IconCheck, IconClock, IconEdit, IconMapPin, IconShield, IconUser } from "../components/Icons";
+import { AlertTriangle as IconAlert, CheckCircle2 as IconCheck, Clock3 as IconClock, MapPin as IconMapPin, Pencil as IconEdit, ShieldCheck as IconShield, User as IconUser } from "lucide-react";
 
 export default function ReportDetail() {
   const { id } = useParams();
@@ -22,7 +22,7 @@ export default function ReportDetail() {
       <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="space-y-5">
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {report.evidence?.dataUrl ? <img src={report.evidence.dataUrl} alt={`Bukti survey ${report.outlet?.outletName}`} className="max-h-[560px] w-full bg-slate-950 object-contain" /> : <div className="grid h-64 place-items-center bg-slate-100 text-slate-500">Foto tidak tersedia</div>}
+            {report.evidence?.dataUrl ? <img src={report.evidence.dataUrl} alt={`Bukti survei ${report.outlet?.outletName}`} className="max-h-[560px] w-full bg-slate-950 object-contain" /> : <div className="grid h-64 place-items-center bg-slate-100 text-slate-500">Foto tidak tersedia</div>}
             <div className="grid gap-3 p-4 sm:grid-cols-2">
               <EvidenceItem Icon={IconClock} label="Waktu foto" value={metadata?.capturedAtWib || "Tidak tersedia"} />
               <EvidenceItem Icon={IconMapPin} label="Koordinat" value={metadata ? `${metadata.latitude.toFixed(6)}, ${metadata.longitude.toFixed(6)}` : "Tidak tersedia"} />
@@ -31,7 +31,7 @@ export default function ReportDetail() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Jawaban survey</h2><div className="mt-4 divide-y divide-slate-200">{surveyQuestions.map((question, index) => <div key={question} className="py-4 first:pt-0 last:pb-0"><p className="text-sm font-medium leading-relaxed text-slate-800"><span className="mr-2 text-emerald-800">{index + 1}.</span>{question}</p><p className="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">{report.answers?.[index] || "Jawaban tidak tersedia"}</p></div>)}</div></section>
+          <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Jawaban survei</h2><div className="mt-4 divide-y divide-slate-200">{surveyQuestions.map((question, index) => <div key={question} className="py-4 first:pt-0 last:pb-0"><p className="text-sm font-medium leading-relaxed text-slate-800"><span className="mr-2 text-emerald-800">{index + 1}.</span>{question}</p><p className="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">{report.answers?.[index] || "Jawaban tidak tersedia"}</p></div>)}</div></section>
         </div>
 
         <aside className="space-y-5">

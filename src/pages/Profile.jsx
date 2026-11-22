@@ -1,5 +1,5 @@
 import { useStore } from "../lib/store";
-import { IconShield, IconUser } from "../components/Icons";
+import { LogOut as IconUser, ShieldCheck as IconShield } from "lucide-react";
 
 export default function Profile() {
   const { user, logout } = useStore();

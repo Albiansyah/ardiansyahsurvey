@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(process.cwd(), './src')
+    }
+  },
   plugins: [
     react(),
     VitePWA({
@@ -11,8 +17,8 @@ export default defineConfig({
         name: 'Ardi Survey',
         short_name: 'ArdiSurvey',
         lang: 'id',
-        theme_color: '#020617',
-        background_color: '#f1f5f9',
+        theme_color: '#047857',
+        background_color: '#f8fafc',
         display: 'standalone',
         start_url: '/',
         icons: [

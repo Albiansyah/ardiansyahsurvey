@@ -7,27 +7,41 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:e2e": "playwright test",
     "security:check-bundle": "node scripts/check-secret-bundle.mjs",
     "supabase:create-master": "node scripts/create-initial-master.mjs",
     "supabase:setup-storage": "node scripts/setup-storage.mjs",
     "supabase:verify": "node scripts/verify-supabase.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@hookform/resolvers": "^7.0.8",
+    "@supabase/supabase-js": "^2.119.2",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.2",
+    "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
+    "idb": "^8.0.4",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
+    "lucide-react": "^1.77.0",
+    "radix-ui": "^1.8.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hook-form": "^7.92.0",
     "react-router-dom": "^6.26.0",
-    "xlsx": "^0.18.5",
+    "recharts": "^3.8.0",
+    "sonner": "^2.0.8",
+    "zod": "^4.6.7",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.0",
+    "@playwright/test": "^1.65.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
-    "vite": "^5.3.0",
-    "vite-plugin-pwa": "^0.20.0"
+    "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0"
   }
 }

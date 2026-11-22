@@ -3,8 +3,9 @@ import { Link } from "react-router-dom";
 import { useStore } from "../lib/store";
 import ReportCard from "../components/ReportCard";
 import { EmptyState } from "../components/PageState";
-import { IconEdit, IconFilter, IconList, IconPlus, IconSearch, IconTrash, IconX } from "../components/Icons";
+import { FileText as IconList, Filter as IconFilter, Pencil as IconEdit, Plus as IconPlus, Search as IconSearch, Trash2 as IconTrash, X as IconX } from "lucide-react";
 import { toast, useConfirmStore } from "../lib/toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Reports() {
   const { user, reports, deleteReport, submitChangeRequest } = useStore();
@@ -24,7 +25,7 @@ export default function Reports() {
 
   const handleMasterDelete = (report) => confirmStore.open({
     title: "Hapus laporan?",
-    message: `Survey ${report.outlet?.outletName} akan dihapus permanen dan tercatat di log.`,
+    message: `Survei ${report.outlet?.outletName} akan dihapus permanen dan tercatat di log.`,
     confirmLabel: "Hapus laporan",
     cancelLabel: "Batal",
     variant: "danger",
@@ -44,17 +45,17 @@ export default function Reports() {
   return (
     <div className="space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-sm font-medium text-emerald-800">Data survey</p><h1 className="mt-1 text-2xl font-bold tracking-tight">Laporan</h1><p className="mt-1 text-sm text-slate-600">{filtered.length} laporan ditampilkan.</p></div>
-        {!isMaster && <Link to="/form" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800"><IconPlus className="h-4 w-4" /> Survey baru</Link>}
+        <div><p className="text-sm font-medium text-emerald-800">Data survei</p><h1 className="mt-1 text-2xl font-bold tracking-tight">Laporan</h1><p className="mt-1 text-sm text-slate-600">{filtered.length} laporan ditampilkan.</p></div>
+        {!isMaster && <Link to="/form" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800"><IconPlus className="h-4 w-4" /> Survei Baru</Link>}
       </header>
 
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_14rem]">
         <label className="relative"><span className="sr-only">Cari laporan</span><IconSearch className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-500" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari outlet, toko, PIC, atau surveyor" className="min-h-11 w-full rounded-md border border-slate-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/20" /></label>
-        {isMaster ? <label className="relative"><span className="sr-only">Filter surveyor</span><IconFilter className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-500" /><select value={surveyor} onChange={(event) => setSurveyor(event.target.value)} className="min-h-11 w-full rounded-md border border-slate-300 bg-white py-2.5 pl-10 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/20"><option value="all">Semua surveyor</option>{surveyors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <div className="flex min-h-11 items-center rounded-md bg-slate-100 px-3 text-sm text-slate-600">Hanya laporan akun Anda</div>}
+        {isMaster ? <div className="relative"><span className="sr-only">Filter surveyor</span><IconFilter className="pointer-events-none absolute left-3 top-3.5 z-10 h-4 w-4 text-slate-500" /><Select value={surveyor} onValueChange={setSurveyor}><SelectTrigger className="h-11 w-full pl-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua surveyor</SelectItem>{surveyors.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div> : <div className="flex min-h-11 items-center rounded-md bg-slate-100 px-3 text-sm text-slate-600">Hanya laporan akun Anda</div>}
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState Icon={IconList} title={reports.length === 0 ? "Belum ada laporan" : "Laporan tidak ditemukan"} description={reports.length === 0 ? "Data akan muncul setelah survey pertama disimpan." : "Ubah kata pencarian atau filter surveyor."} />
+        <EmptyState Icon={IconList} title={reports.length === 0 ? "Belum ada laporan" : "Laporan tidak ditemukan"} description={reports.length === 0 ? "Data akan muncul setelah survei pertama disimpan." : "Ubah kata pencarian atau filter surveyor."} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((report) => (

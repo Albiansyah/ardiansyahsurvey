@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../lib/store";
 import { EmptyState } from "../components/PageState";
-import { IconCheck, IconKey, IconSearch, IconUser, IconUserPlus, IconX } from "../components/Icons";
+import { CheckCircle2 as IconCheck, KeyRound as IconKey, Search as IconSearch, User as IconUser, UserPlus as IconUserPlus, X as IconX } from "lucide-react";
 import { toast } from "../lib/toast";
 
 const inputClass = "min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/20";

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { IconAlert, IconCheck, IconMapPin } from "./Icons";
+import { AlertTriangle as IconAlert, CheckCircle2 as IconCheck, MapPin as IconMapPin } from "lucide-react";
 import { formatShortWib } from "../lib/format";
 
 export default function ReportCard({ report, showUser, children }) {
@@ -9,7 +9,7 @@ export default function ReportCard({ report, showUser, children }) {
     <article className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-slate-400">
       <Link to={`/reports/${report.id}`} className="block focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-inset">
         <div className="relative h-44 bg-slate-200">
-          {image ? <img src={image} alt={`Bukti survey ${report.outlet?.outletName || "outlet"}`} className="h-full w-full object-cover" loading="lazy" /> : <div className="grid h-full place-items-center text-slate-500"><IconMapPin className="h-7 w-7" /></div>}
+          {image ? <img src={image} alt={`Bukti survei ${report.outlet?.outletName || "outlet"}`} className="h-full w-full object-cover" loading="lazy" /> : <div className="grid h-full place-items-center text-slate-500"><IconMapPin className="h-7 w-7" /></div>}
           <span className={`absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold shadow-sm ${riskCount === 0 ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-950"}`}>
             {riskCount === 0 ? <IconCheck className="h-3.5 w-3.5" /> : <IconAlert className="h-3.5 w-3.5" />}
             {riskCount === 0 ? "Bukti lengkap" : `${riskCount} indikator`}

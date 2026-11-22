@@ -1,20 +1,25 @@
-import { useEffect } from "react";
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
-import { useStore } from "./lib/store";
-import Layout from "./components/Layout";
-import Toast from "./components/Toast";
-import ConfirmDialog from "./components/ConfirmDialog";
-import { PageError, PageLoading } from "./components/PageState";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import SurveyForm from "./pages/SurveyForm";
-import Reports from "./pages/Reports";
-import ReportDetail from "./pages/ReportDetail";
-import History from "./pages/History";
-import Outlets from "./pages/Outlets";
-import Targets from "./pages/Targets";
-import Surveyors from "./pages/Surveyors";
-import Profile from "./pages/Profile";
+import { lazy, Suspense, useEffect } from "react";
+import { Link, Route, Routes, useParams } from "react-router-dom";
+import { ShieldX } from "lucide-react";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import Layout from "@/components/Layout";
+import { PageError, PageLoading } from "@/components/PageState";
+import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
+import { useStore } from "@/lib/store";
+import Login from "@/pages/Login";
+
+const BackupRestore = lazy(() => import("@/pages/BackupRestore"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const ExportData = lazy(() => import("@/pages/ExportData"));
+const History = lazy(() => import("@/pages/History"));
+const Outlets = lazy(() => import("@/pages/Outlets"));
+const Profile = lazy(() => import("@/pages/Profile"));
+const ReportDetail = lazy(() => import("@/pages/ReportDetail"));
+const Reports = lazy(() => import("@/pages/Reports"));
+const SurveyForm = lazy(() => import("@/pages/SurveyForm"));
+const Surveyors = lazy(() => import("@/pages/Surveyors"));
+const Targets = lazy(() => import("@/pages/Targets"));
 
 function SurveyFormRoute() {
   const { id } = useParams();
@@ -23,7 +28,33 @@ function SurveyFormRoute() {
 
 function MasterOnly({ children }) {
   const user = useStore((state) => state.user);
-  return user?.role === "master" ? children : <Navigate to="/" replace />;
+  return user?.role === "master" ? children : <AccessDenied />;
+}
+
+function SurveyorOnly({ children }) {
+  const user = useStore((state) => state.user);
+  return user?.role !== "master" ? children : <AccessDenied />;
+}
+
+function AccessDenied() {
+  return (
+    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-6 text-center sm:p-8">
+      <ShieldX className="mx-auto size-8 text-red-700" aria-hidden="true" />
+      <h1 className="mt-3 text-lg font-semibold text-slate-950">Akses ditolak</h1>
+      <p className="mt-1 text-sm text-slate-600">Peran akun Anda tidak memiliki izin untuk membuka halaman ini.</p>
+      <Button asChild className="mt-5"><Link to="/">Kembali ke Beranda</Link></Button>
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-6 text-center sm:p-8">
+      <h1 className="text-lg font-semibold text-slate-950">Halaman tidak ditemukan</h1>
+      <p className="mt-1 text-sm text-slate-600">Alamat yang Anda buka tidak tersedia.</p>
+      <Button asChild className="mt-5"><Link to="/">Kembali ke Beranda</Link></Button>
+    </div>
+  );
 }
 
 export default function App() {
@@ -33,30 +64,33 @@ export default function App() {
     initialize();
   }, [initialize]);
 
-  if (!hydrated) return <PageLoading label="Menyiapkan data aplikasi" />;
-  if (storageError) return <main className="mx-auto max-w-lg p-6"><PageError message={storageError} onRetry={user ? loadData : () => window.location.reload()} /></main>;
-  if (user && loadingData) return <Layout><PageLoading label="Mengambil data aplikasi" /></Layout>;
+  if (!hydrated) return <main className="min-h-dvh p-6"><PageLoading label="Menyiapkan data aplikasi" /></main>;
+  if (storageError) return <main className="mx-auto min-h-dvh max-w-lg p-6"><PageError message={storageError} onRetry={user ? loadData : () => window.location.reload()} /></main>;
 
   return (
     <>
       {!user ? <Login /> : (
         <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/form" element={user.role === "master" ? <Navigate to="/" replace /> : <SurveyForm key="new" />} />
-            <Route path="/edit/:id" element={<SurveyFormRoute />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/reports/:id" element={<ReportDetail />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/outlets" element={<MasterOnly><Outlets /></MasterOnly>} />
-            <Route path="/targets" element={<MasterOnly><Targets /></MasterOnly>} />
-            <Route path="/surveyors" element={<MasterOnly><Surveyors /></MasterOnly>} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {loadingData ? <PageLoading label="Mengambil data aplikasi" /> : (
+            <Suspense fallback={<PageLoading label="Membuka halaman" />}><Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/form" element={<SurveyorOnly><SurveyForm key="new" /></SurveyorOnly>} />
+              <Route path="/edit/:id" element={<SurveyFormRoute />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/reports/:id" element={<ReportDetail />} />
+              <Route path="/export" element={<ExportData />} />
+              <Route path="/backup" element={<MasterOnly><BackupRestore /></MasterOnly>} />
+              <Route path="/history" element={<History />} />
+              <Route path="/outlets" element={<MasterOnly><Outlets /></MasterOnly>} />
+              <Route path="/targets" element={<MasterOnly><Targets /></MasterOnly>} />
+              <Route path="/surveyors" element={<MasterOnly><Surveyors /></MasterOnly>} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes></Suspense>
+          )}
         </Layout>
       )}
-      <Toast />
+      <Toaster position="top-center" richColors closeButton />
       <ConfirmDialog />
     </>
   );

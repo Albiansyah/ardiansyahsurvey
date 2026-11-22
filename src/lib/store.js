@@ -184,7 +184,10 @@ export const useStore = create((set, get) => ({
       ]);
       const profiles = profileRows.map(mapProfile);
       const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
-      const reportsWithUrls = await withEvidenceUrls(reportRows);
+      // Tetap kompatibel sebelum dan sesudah migrasi soft-delete. PostgREST
+      // tidak mengembalikan properti ini sebelum kolom tersedia.
+      const activeReportRows = reportRows.filter((row) => !row.deleted_at);
+      const reportsWithUrls = await withEvidenceUrls(activeReportRows);
       set({
         surveyors: profiles.filter((profile) => profile.backendRole === "surveyor"),
         outlets: outletRows.map(mapOutlet),

@@ -1,50 +1,83 @@
-﻿@tailwind base;
+@import "@fontsource-variable/plus-jakarta-sans";
+
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: "Segoe UI", "Noto Sans", system-ui, -apple-system, sans-serif;
-  background: #f1f5f9;
-  color: #0f172a;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  :root {
+    --font-heading: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+    --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 162 94% 24%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 25% 35%;
+    --accent: 152 76% 94%;
+    --accent-foreground: 162 94% 20%;
+    --destructive: 0 72% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 86%;
+    --input: 214 32% 86%;
+    --ring: 162 94% 24%;
+    --chart-1: 162 94% 24%;
+    --chart-2: 160 84% 39%;
+    --chart-3: 152 76% 80%;
+    --chart-4: 215 16% 47%;
+    --chart-5: 215 20% 65%;
+    --radius: 0.5rem;
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 162 94% 24%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 152 76% 94%;
+    --sidebar-accent-foreground: 162 94% 20%;
+    --sidebar-border: 214 32% 86%;
+    --sidebar-ring: 162 94% 24%;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    color-scheme: light;
+    @apply bg-background font-sans text-foreground;
+  }
+
+  body {
+    @apply min-w-0 bg-background text-foreground antialiased;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply text-base md:text-sm;
+  }
 }
 
-html { color-scheme: light; }
-
-button, input, select, textarea { font: inherit; }
-
-select {
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, #475569 50%), linear-gradient(135deg, #475569 50%, transparent 50%);
-  background-position: calc(100% - 17px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 2.5rem !important;
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
 }
-
-*:focus-visible {
-  outline: 2px solid #1e40af;
-  outline-offset: 2px;
-}
-
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-.animate-slide-up { animation: slide-up 220ms ease-out; }
-.animate-fade-in { animation: fade-in 180ms ease-out; }
-.animate-scale-in { animation: scale-in 180ms ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

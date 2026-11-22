@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { IconCamera, IconCheck, IconMapPin, IconShield, IconTrash } from "./Icons";
+import { Camera, CheckCircle2, MapPin, ShieldCheck, Trash2 } from "lucide-react";
 import { formatWibDateTime } from "../lib/format";
 
 const getPosition = () => new Promise((resolve, reject) => {
@@ -100,14 +100,14 @@ export default function ImageUploader({ value, onChange }) {
     return (
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
         <div className="relative">
-          <img src={value.dataUrl} alt="Bukti foto survey dengan geotag" className="max-h-[420px] w-full object-contain" />
+          <img src={value.dataUrl} alt="Bukti foto survei dengan lokasi" className="max-h-[420px] w-full object-contain" />
           <button type="button" onClick={() => { onChange(null); setStatus("idle"); if (inputRef.current) inputRef.current.value = ""; }} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-md bg-white text-red-700 shadow-md hover:bg-red-50" aria-label="Hapus foto">
-            <IconTrash className="h-5 w-5" />
+            <Trash2 className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
         <div className="grid gap-2 bg-white p-3 text-sm sm:grid-cols-2">
-          <p className="flex items-start gap-2 text-slate-700"><IconMapPin className="mt-0.5 h-4 w-4 flex-none text-emerald-700" /><span>{value.metadata.latitude.toFixed(6)}, {value.metadata.longitude.toFixed(6)}<br /><span className="text-xs text-slate-500">Akurasi {Math.round(value.metadata.accuracy)} meter</span></span></p>
-          <p className="flex items-start gap-2 text-slate-700"><IconShield className="mt-0.5 h-4 w-4 flex-none text-emerald-700" /><span>{riskCount === 0 ? "Pemeriksaan dasar lolos" : `${riskCount} indikator perlu ditinjau master`}<br /><span className="text-xs text-slate-500">Metadata disimpan bersama laporan</span></span></p>
+          <p className="flex items-start gap-2 text-slate-700"><MapPin className="mt-0.5 h-4 w-4 flex-none text-emerald-700" aria-hidden="true" /><span>{value.metadata.latitude.toFixed(6)}, {value.metadata.longitude.toFixed(6)}<br /><span className="text-xs text-slate-600">Akurasi {Math.round(value.metadata.accuracy)} meter</span></span></p>
+          <p className="flex items-start gap-2 text-slate-700"><ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-emerald-700" aria-hidden="true" /><span>{riskCount === 0 ? "Pemeriksaan dasar lolos" : `${riskCount} indikator perlu ditinjau master`}<br /><span className="text-xs text-slate-600">Metadata disimpan bersama laporan</span></span></p>
         </div>
       </div>
     );
@@ -119,15 +119,15 @@ export default function ImageUploader({ value, onChange }) {
         {status === "locating" ? (
           <span className="h-7 w-7 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-700" />
         ) : (
-          <span className="grid h-11 w-11 place-items-center rounded-md bg-emerald-800 text-white"><IconCamera className="h-5 w-5" /></span>
+          <span className="grid h-11 w-11 place-items-center rounded-md bg-emerald-800 text-white"><Camera className="h-5 w-5" aria-hidden="true" /></span>
         )}
         <span className="mt-3 text-sm font-semibold text-slate-900">{status === "locating" ? "Mengambil GPS dan memproses foto" : "Buka kamera dan ambil foto"}</span>
         <span className="mt-1 max-w-md text-xs leading-relaxed text-slate-600">Foto akan diberi stempel waktu WIB, koordinat, dan akurasi GPS. Unggah galeri tidak disediakan pada alur ini.</span>
         <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="sr-only" disabled={status === "locating"} />
       </label>
-      {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
+      {error && <div className="mt-2 flex flex-wrap items-center justify-between gap-2" role="alert"><p className="text-sm text-red-700">{error}</p><button type="button" onClick={() => inputRef.current?.click()} className="min-h-11 rounded-md border border-red-300 bg-white px-3 text-sm font-semibold text-red-800 hover:bg-red-50">Coba Lagi</button></div>}
       <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-        <IconCheck className="mt-0.5 h-4 w-4 flex-none" />
+        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
         <p>Validasi browser membantu peninjauan, tetapi deteksi VPN dan GPS palsu secara penuh memerlukan validasi server serta kebijakan perangkat terkelola.</p>
       </div>
     </div>

@@ -9,4 +9,6 @@ ini.bat
 New Text Document.txt
 .push-repo/
 supabase/.temp/
+test-results/
+playwright-report/
 

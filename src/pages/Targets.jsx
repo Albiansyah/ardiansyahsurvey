@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../lib/store";
 import { getWibPeriod } from "../lib/format";
-import { IconSearch, IconTarget } from "../components/Icons";
+import { Search as IconSearch, Target as IconTarget } from "lucide-react";
 import { toast } from "../lib/toast";
 
 export default function Targets() {
