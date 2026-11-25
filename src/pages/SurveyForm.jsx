@@ -928,12 +928,11 @@ export default function SurveyForm() {
           {/* TOMBOL FORM */}
 
           <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
-
             <Button
               type="button"
               variant="outline"
               onClick={() => navigate(-1)}
-              className="h-12 sm:w-32"
+              className="h-12 w-full sm:w-32" // Tambah w-full
             >
               Batal
             </Button>
@@ -941,7 +940,7 @@ export default function SurveyForm() {
             <Button
               type="submit"
               disabled={isSubmitting || loadingData}
-              className="h-12 flex-1 bg-emerald-700 hover:bg-emerald-800 text-base"
+              className="h-12 w-full sm:flex-1 bg-emerald-700 hover:bg-emerald-800 text-base" // Tambah w-full
             >
 
               {isSubmitting && (

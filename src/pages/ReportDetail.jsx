@@ -1,6 +1,5 @@
 import { Link, useParams } from "react-router-dom";
 import { useStore } from "../lib/store";
-import { surveyQuestions } from "../lib/dummyData";
 import { formatWibDateTime } from "../lib/format";
 import {
   AlertTriangle as IconAlert,
@@ -11,18 +10,27 @@ import {
   ShieldCheck as IconShield,
   User as IconUser,
   ArrowLeft,
-  ImageOff
+  ImageOff,
+  Sun
 } from "lucide-react";
 
 // Shadcn UI
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
+// Helper untuk mengambil Static Map LocationIQ
+const getMapUrl = (lat, lon) => {
+  const token = import.meta.env.VITE_LOCATIONIQ_TOKEN;
+  if (!token || !lat || !lon) return null;
+  return `https://maps.locationiq.com/v3/staticmap?key=${token}&center=${lat},${lon}&zoom=17&size=200x200&format=jpg&markers=icon:small-red-cutout|${lat},${lon}`;
+};
+
 export default function ReportDetail() {
   const { id } = useParams();
-  const { user, reports = [] } = useStore();
+  // Ambil data questions dari store agar dinamis
+  const { user, reports = [], questions = [] } = useStore();
   
   const report = reports.find((item) => item.id === id);
 
@@ -69,15 +77,63 @@ export default function ReportDetail() {
         {/* ================= KOLOM KIRI ================= */}
         <div className="space-y-6">
           
-          {/* SECTION 1: EVIDENSI FOTO */}
+          {/* SECTION 1: EVIDENSI FOTO DENGAN OVERLAY */}
           <Card className="overflow-hidden">
             {report.evidence?.dataUrl ? (
-              <div className="bg-slate-950">
+              <div className="relative w-full overflow-hidden bg-slate-900">
                 <img 
                   src={report.evidence.dataUrl} 
                   alt={`Bukti survei ${report.outlet?.outletName}`} 
-                  className="max-h-[560px] w-full object-contain" 
+                  className="w-full object-cover aspect-[3/4] sm:aspect-video" 
                 />
+
+                {/* OVERLAY GLASSMORPHISM (Peta, Alamat, Cuaca, Waktu) */}
+                <div className="absolute bottom-3 left-3 right-3 rounded-xl bg-slate-900/85 p-3 shadow-lg backdrop-blur-md border border-white/10 text-white">
+                  <div className="flex items-center gap-3">
+                    {/* MINI MAP */}
+                    <div className="size-20 shrink-0 overflow-hidden rounded-lg border border-white/20 relative bg-slate-800">
+                      {metadata?.latitude && metadata?.longitude ? (
+                        <img
+                          src={getMapUrl(metadata.latitude, metadata.longitude)}
+                          alt="Peta"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-400"><IconMapPin className="size-4" /></div>
+                      )}
+                      <IconMapPin className="absolute bottom-1 right-1 size-3 text-red-500 drop-shadow-md" />
+                    </div>
+
+                    {/* ALAMAT & CUACA */}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="truncate text-sm font-bold">
+                        {metadata?.address?.split(",")[0] || "Lokasi Terdeteksi"}
+                      </h4>
+                      <p className="text-[10px] text-slate-300 line-clamp-2">
+                        {metadata?.address || "Alamat tidak tersedia"}
+                      </p>
+                      
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1 text-[10px] font-mono text-emerald-300">
+                          <IconMapPin className="size-3" /> {metadata?.latitude?.toFixed(5)}, {metadata?.longitude?.toFixed(5)}
+                        </div>
+                        {metadata?.weather && (
+                          <div className="flex items-center gap-1 text-[11px] font-bold">
+                            <Sun className="size-3 text-yellow-400" /> {metadata.weather}
+                          </div>
+                        )}
+                      </div>
+                      {metadata?.weatherDescription && (
+                        <p className="mt-1 text-[10px] text-slate-400">{metadata.weatherDescription}</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* WAKTU */}
+                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400 border-t border-white/10 pt-2">
+                    <IconClock className="size-3" /> {metadata?.capturedAtWib || "-"}
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="grid h-64 place-items-center bg-slate-100 text-slate-400">
@@ -126,24 +182,30 @@ export default function ReportDetail() {
             </CardContent>
           </Card>
 
-          {/* SECTION 2: JAWABAN SURVEI */}
+          {/* SECTION 2: JAWABAN SURVEI DINAMIS */}
           <Card>
             <CardHeader className="pb-3 border-b border-slate-100">
               <CardTitle className="text-lg">Jawaban Survei</CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
               <div className="divide-y divide-slate-100">
-                {surveyQuestions.map((question, index) => (
-                  <div key={index} className="py-4 first:pt-0 last:pb-0">
+                {/* Render dari state questions, bukan dummy */}
+                {questions.map((q, index) => (
+                  <div key={q.id || index} className="py-4 first:pt-0 last:pb-0">
                     <p className="text-sm font-medium leading-relaxed text-slate-800">
                       <span className="mr-2 text-emerald-700">{index + 1}.</span>
-                      {question}
+                      {q.text}
                     </p>
                     <div className="mt-2 whitespace-pre-wrap rounded-md border border-slate-100 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
                       {report.answers?.[index] || "Jawaban tidak tersedia"}
                     </div>
                   </div>
                 ))}
+                {questions.length === 0 && (
+                  <p className="py-4 text-sm text-slate-500 text-center">
+                    Tidak ada pertanyaan yang terdaftar di sistem.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>

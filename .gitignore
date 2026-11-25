@@ -12,3 +12,5 @@ supabase/.temp/
 test-results/
 playwright-report/
 
+# Folder lokal / arsip
+aplikasi offline/
