@@ -236,3 +236,4 @@ export const subscribeToReportChanges = (onChange, onStatus) => {
 };
 
 export const supabaseProject = { url: supabaseUrl };
+export const supabase = realtimeClient;

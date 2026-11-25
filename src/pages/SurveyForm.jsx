@@ -1,366 +1,1464 @@
+
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
-import { Building2, CheckCircle2, Clock3, Info, MapPin, ShieldCheck, User } from "lucide-react";
+
+import {
+  Building2,
+  CheckCircle2,
+  Clock3,
+  Info,
+  MapPin,
+  ShieldCheck,
+  User,
+  Loader2
+} from "lucide-react";
+
 import ImageUploader from "@/components/ImageUploader";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { surveyQuestions } from "@/lib/dummyData";
+
 import { formatWibDateTime, haversineMeters } from "@/lib/format";
-import { enqueueReport, readDraft, removeDraft, saveDraft } from "@/lib/offline";
+import {
+  enqueueReport,
+  readDraft,
+  removeDraft,
+  saveDraft
+} from "@/lib/offline";
 import { useStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
 
-const surveySchema = z.object({
-  outletId: z.string().min(1, "Pilih outlet yang disurvei."),
-  answers: z.array(z.string().trim().min(1, "Jawaban wajib diisi.")).length(9),
-  evidence: z.any().refine(Boolean, "Foto dan lokasi wajib diambil."),
-  teamMembers: z.string().trim().min(1, "Isi anggota tim atau tulis Mandiri."),
-  attendanceConfirmed: z.boolean().refine(Boolean, "Konfirmasi kehadiran wajib dipilih."),
-  changeReason: z.string().optional()
-});
-
-const emptyValues = {
-  outletId: "",
-  answers: surveyQuestions.map(() => ""),
-  evidence: null,
-  teamMembers: "",
-  attendanceConfirmed: false,
-  changeReason: ""
-};
-
 export default function SurveyForm() {
-  const { user, reports, outlets, addReport, updateReport, submitChangeRequest } = useStore();
+  const {
+    user,
+    reports,
+    outlets = [],
+    questions = [],
+    addReport,
+    updateReport,
+    submitChangeRequest,
+    loadingData
+  } = useStore();
+
   const navigate = useNavigate();
   const { id } = useParams();
+
   const isEdit = Boolean(id);
-  const existing = isEdit ? reports.find((report) => report.id === id) : null;
+
+  const existing = isEdit
+    ? reports.find((report) => report.id === id)
+    : null;
+
   const [now, setNow] = useState(new Date());
-  const [draftReady, setDraftReady] = useState(isEdit);
+  const [draftReady, setDraftReady] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState(null);
   const [success, setSuccess] = useState(null);
-  const draftKey = `survey:${user.id}:${id || "new"}`;
+
+  const draftKey = `survey:${user?.id}:${id || "new"}`;
+
+  // ==========================================
+  // VALIDASI FORM
+  // ==========================================
+
+  const surveySchema = useMemo(
+    () =>
+      z.object({
+        outletId: z.string().min(1, "Pilih outlet yang disurvei."),
+
+        answers: z
+          .array(z.string().trim().min(1, "Jawaban wajib diisi."))
+          .length(
+            questions.length,
+            "Semua pertanyaan wajib dijawab."
+          ),
+
+        evidence: z.any().refine(
+          Boolean,
+          "Foto dan lokasi wajib diambil."
+        ),
+
+        teamMembers: z
+          .string()
+          .trim()
+          .min(1, "Isi anggota tim atau tulis Mandiri."),
+
+        attendanceConfirmed: z
+          .boolean()
+          .refine(Boolean, "Konfirmasi kehadiran wajib dipilih."),
+
+        changeReason: z.string().optional()
+      }),
+    [questions.length]
+  );
+
+  const emptyValues = useMemo(
+    () => ({
+      outletId: "",
+      answers: questions.map(() => ""),
+      evidence: null,
+      teamMembers: "",
+      attendanceConfirmed: false,
+      changeReason: ""
+    }),
+    [questions.length]
+  );
 
   const form = useForm({
     resolver: zodResolver(surveySchema),
-    defaultValues: existing ? valuesFromReport(existing) : emptyValues,
+    defaultValues: existing
+      ? valuesFromReport(existing, questions.length)
+      : emptyValues,
     mode: "onTouched"
   });
-  const { control, formState: { errors, isDirty, isSubmitting }, getValues, handleSubmit, register, reset, setError, setValue } = form;
+
+  const {
+    control,
+    formState: { errors, isSubmitting },
+    handleSubmit,
+    reset,
+    setError,
+    setValue
+  } = form;
+
   const values = useWatch({ control });
 
+  // ==========================================
+  // JAM REALTIME
+  // ==========================================
+
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    if (existing) {
-      reset(valuesFromReport(existing));
-      setDraftReady(true);
-      return;
-    }
-    let active = true;
-    readDraft(draftKey).then((draft) => {
-      if (!active) return;
-      if (draft?.values) {
-        reset({ ...emptyValues, ...draft.values });
-        setDraftSavedAt(draft.savedAt);
-        toast.info("Draf survei dari perangkat telah dipulihkan.");
-      }
-      setDraftReady(true);
-    }).catch(() => setDraftReady(true));
-    return () => { active = false; };
-  }, [draftKey, existing, reset]);
+  // ==========================================
+  // MEMUAT DRAFT DAN DATA LAPORAN
+  // ==========================================
 
   useEffect(() => {
-    if (!draftReady || isEdit || success) return undefined;
+    if (isEdit) {
+      if (existing) {
+        reset(valuesFromReport(existing, questions.length));
+        setDraftReady(true);
+      }
+
+      return;
+    }
+
+    if (questions.length === 0) return;
+
+    let active = true;
+
+    readDraft(draftKey)
+      .then((draft) => {
+        if (!active) return;
+
+        if (
+          draft?.values?.answers?.length === questions.length
+        ) {
+          reset({
+            ...emptyValues,
+            ...draft.values
+          });
+
+          setDraftSavedAt(draft.savedAt);
+
+          toast.info("Draf survei dipulihkan.");
+        } else {
+          reset(emptyValues);
+        }
+
+        setDraftReady(true);
+      })
+      .catch(() => {
+        reset(emptyValues);
+        setDraftReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    draftKey,
+    existing,
+    reset,
+    emptyValues,
+    questions.length,
+    isEdit
+  ]);
+
+  // ==========================================
+  // AUTOSAVE DRAFT
+  // ==========================================
+
+  useEffect(() => {
+    if (!draftReady || isEdit || success) {
+      return undefined;
+    }
+
     let timer;
+
     const subscription = form.watch((nextValues) => {
       window.clearTimeout(timer);
+
       timer = window.setTimeout(async () => {
-        await saveDraft(draftKey, { values: nextValues });
-        setDraftSavedAt(new Date().toISOString());
-      }, 650);
+        try {
+          await saveDraft(draftKey, {
+            values: nextValues
+          });
+
+          setDraftSavedAt(new Date().toISOString());
+        } catch (error) {
+          console.error("Gagal menyimpan draft:", error);
+        }
+      }, 1000);
     });
+
     return () => {
       window.clearTimeout(timer);
       subscription.unsubscribe();
     };
   }, [draftKey, draftReady, form, isEdit, success]);
 
-  useEffect(() => {
-    if (!isDirty || isSubmitting || success) return undefined;
-    const warning = "Survei belum dikirim. Tinggalkan halaman dan pertahankan draf di perangkat?";
-    const beforeUnload = (event) => {
-      event.preventDefault();
-      event.returnValue = warning;
-    };
-    const beforeLink = (event) => {
-      const anchor = event.target.closest("a[href]");
-      if (!anchor || anchor.target === "_blank") return;
-      if (!window.confirm(warning)) event.preventDefault();
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    document.addEventListener("click", beforeLink, true);
-    return () => {
-      window.removeEventListener("beforeunload", beforeUnload);
-      document.removeEventListener("click", beforeLink, true);
-    };
-  }, [isDirty, isSubmitting, success]);
+  // ==========================================
+  // DATA OUTLET
+  // ==========================================
 
-  const selectedOutlet = useMemo(() => outlets.find((outlet) => outlet.id === values?.outletId), [outlets, values?.outletId]);
-  const responsibleUser = isEdit && existing ? { id: existing.userId, nama: existing.userName } : user;
+  const selectedOutlet = useMemo(
+    () =>
+      outlets.find(
+        (outlet) => outlet.id === values?.outletId
+      ),
+    [outlets, values?.outletId]
+  );
+
+  const responsibleUser =
+    isEdit && existing
+      ? {
+          id: existing.userId,
+          nama: existing.userName
+        }
+      : user;
+
+  // ==========================================
+  // HITUNG JARAK GPS KE OUTLET
+  // ==========================================
+
   const distance = useMemo(() => {
-    if (!selectedOutlet || !values?.evidence?.metadata) return null;
-    return haversineMeters(values.evidence.metadata.latitude, values.evidence.metadata.longitude, selectedOutlet.latitude, selectedOutlet.longitude);
-  }, [selectedOutlet, values?.evidence]);
-  const completed = (values?.outletId ? 1 : 0)
-    + (values?.answers?.filter((answer) => answer?.trim()).length || 0)
-    + (values?.evidence ? 1 : 0)
-    + (values?.teamMembers?.trim() ? 1 : 0)
-    + (values?.attendanceConfirmed ? 1 : 0);
-  const progress = Math.round((completed / 13) * 100);
+    if (!selectedOutlet || !values?.evidence?.metadata) {
+      return null;
+    }
 
-  if (isEdit && !existing) return <MissingReport />;
-  if (isEdit && existing.userId !== user.id && user.role !== "master") return <MissingReport />;
-  if (success) return <SuccessState result={success} onAgain={() => { reset(emptyValues); setSuccess(null); setDraftSavedAt(null); }} />;
+    const latitude = Number(
+      values.evidence.metadata.latitude
+    );
+
+    const longitude = Number(
+      values.evidence.metadata.longitude
+    );
+
+    const outletLatitude = Number(selectedOutlet.latitude);
+    const outletLongitude = Number(selectedOutlet.longitude);
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(outletLatitude) ||
+      !Number.isFinite(outletLongitude) ||
+      !outletLatitude ||
+      !outletLongitude
+    ) {
+      return null;
+    }
+
+    return haversineMeters(
+      latitude,
+      longitude,
+      outletLatitude,
+      outletLongitude
+    );
+  }, [selectedOutlet, values?.evidence]);
+
+  // ==========================================
+  // PROGRESS FORM
+  // ==========================================
+
+  const completed =
+    (values?.outletId ? 1 : 0) +
+    (values?.answers?.filter((answer) => answer?.trim()).length || 0) +
+    (values?.evidence ? 1 : 0) +
+    (values?.teamMembers?.trim() ? 1 : 0) +
+    (values?.attendanceConfirmed ? 1 : 0);
+
+  const totalFields = questions.length + 4;
+
+  const progress = totalFields
+    ? Math.round((completed / totalFields) * 100)
+    : 0;
+
+  // ==========================================
+  // KONDISI HALAMAN
+  // ==========================================
+
+  if (isEdit && !existing) {
+    return <MissingReport />;
+  }
+
+  if (
+    isEdit &&
+    existing &&
+    existing.userId !== user?.id &&
+    user?.role !== "master"
+  ) {
+    return <MissingReport />;
+  }
+
+  if (success) {
+    return (
+      <SuccessState
+        result={success}
+        onAgain={() => {
+          reset(emptyValues);
+          setSuccess(null);
+          setDraftSavedAt(null);
+        }}
+      />
+    );
+  }
+
+  // ==========================================
+  // SUBMIT SURVEI
+  // ==========================================
 
   const submit = async (data) => {
-    if (isEdit && user.role !== "master" && !data.changeReason?.trim()) {
-      setError("changeReason", { message: "Alasan perubahan wajib diisi." });
-      return;
+    const capturedAt = data.evidence?.metadata?.capturedAt;
+
+    if (capturedAt && !isEdit) {
+      const diffMins =
+        (new Date().getTime() -
+          new Date(capturedAt).getTime()) /
+        60000;
+
+      if (diffMins > 60) {
+        return toast.error(
+          "Foto berumur lebih dari 60 menit. Ambil foto baru."
+        );
+      }
     }
-    if (!navigator.onLine && isEdit) {
-      toast.error("Perubahan laporan memerlukan koneksi. Draf tetap tersimpan di perangkat.");
+
+    if (
+      isEdit &&
+      user.role !== "master" &&
+      !data.changeReason?.trim()
+    ) {
+      setError("changeReason", {
+        message: "Alasan perubahan wajib diisi."
+      });
+
       return;
     }
 
     const payload = {
       outletId: data.outletId,
-      answers: data.answers.map((answer) => answer.trim()),
+
+      answers: data.answers.map((answer) =>
+        answer.trim()
+      ),
+
       evidence: data.evidence,
+
       presence: {
         ...(existing?.presence || {}),
+
         surveyorId: responsibleUser.id,
+
         surveyorName: responsibleUser.nama,
+
         teamMembers: data.teamMembers.trim(),
-        statement: "Saya menyatakan tim berada di lokasi outlet saat survei dilakukan.",
-        confirmedAt: data.evidence?.metadata?.capturedAt || existing?.presence?.confirmedAt || new Date().toISOString(),
-        distanceToOutletMeters: distance,
-        lastSubmittedById: user.id,
-        lastSubmittedByName: user.nama,
-        lastSubmittedAt: new Date().toISOString()
+
+        statement:
+          "Saya menyatakan tim berada di lokasi outlet saat survei dilakukan.",
+
+        confirmedAt:
+          data.evidence?.metadata?.capturedAt ||
+          existing?.presence?.confirmedAt ||
+          new Date().toISOString(),
+
+        distanceToOutletMeters: distance
       }
     };
 
     try {
       if (!navigator.onLine) {
-        await enqueueReport(user.id, { ...payload, recordedAt: new Date().toISOString() });
+        await enqueueReport(user.id, {
+          ...payload,
+          recordedAt: new Date().toISOString()
+        });
+
         await removeDraft(draftKey);
+
         reset(emptyValues);
+
         setSuccess({ queued: true });
-        toast.success("Survei tersimpan di perangkat dan akan dikirim saat koneksi kembali.");
+
+        toast.success("Survei tersimpan di perangkat.");
+
       } else if (isEdit && user.role !== "master") {
-        await submitChangeRequest({ type: "edit", reportId: id, proposedData: payload, reason: data.changeReason.trim() });
-        toast.success("Pengajuan perubahan dikirim ke master.");
+        await submitChangeRequest({
+          type: "edit",
+          reportId: id,
+          proposedData: payload,
+          reason: data.changeReason.trim()
+        });
+
+        toast.success("Pengajuan perubahan dikirim.");
+
         navigate("/history");
+
       } else if (isEdit) {
         await updateReport(id, payload);
-        toast.success("Laporan berhasil diperbarui.");
+
+        toast.success("Laporan diperbarui.");
+
         navigate(`/reports/${id}`);
+
       } else {
-        const reportId = await addReport({ recordedAt: new Date().toISOString(), ...payload });
+        const reportId = await addReport({
+          recordedAt: new Date().toISOString(),
+          ...payload
+        });
+
         await removeDraft(draftKey);
+
         reset(emptyValues);
-        setSuccess({ queued: false, reportId });
+
+        setSuccess({
+          queued: false,
+          reportId
+        });
+
         toast.success("Survei berhasil dikirim.");
       }
+
     } catch (error) {
-      toast.error(error.message || "Survei belum dapat disimpan. Periksa koneksi lalu coba lagi.");
+      console.error("Submit survey error:", error);
+
+      toast.error(
+        error.message || "Survei gagal disimpan."
+      );
     }
   };
 
-  const cancel = () => {
-    if (!isDirty || window.confirm("Survei belum dikirim. Tinggalkan halaman dan pertahankan draf di perangkat?")) navigate(-1);
-  };
+  // ==========================================
+  // TAMPILAN UTAMA
+  // ==========================================
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="mx-auto max-w-3xl space-y-5 animate-in fade-in duration-300">
+
+      {/* HEADER */}
+
       <header>
-        <p className="text-sm font-medium text-emerald-800">{isEdit ? "Perubahan data" : "Survei lapangan"}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{isEdit ? "Edit laporan survei" : "Survei baru"}</h1>
-        <p className="mt-1 text-sm text-slate-600">Lengkapi outlet, sembilan jawaban, dan bukti kehadiran.</p>
+        <p className="text-sm font-medium text-emerald-700">
+          {isEdit ? "Perubahan data" : "Survei lapangan"}
+        </p>
+
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">
+          {isEdit ? "Edit Laporan Survei" : "Survei Baru"}
+        </h1>
+
+        <p className="mt-1 text-sm text-slate-600">
+          Lengkapi data outlet, jawab {questions.length} pertanyaan,
+          dan lampirkan bukti.
+        </p>
       </header>
 
-      <div className="rounded-xl border-l-[3px] border-emerald-700 bg-white p-4">
-        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-          <span className="font-medium text-slate-800">Kelengkapan {completed} dari 13 bagian</span>
-          <span className="tabular-nums text-slate-600">{progress}%</span>
+      {/* PROGRESS */}
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+
+        <div className="mb-2 flex items-center justify-between text-sm">
+          <span className="font-medium text-slate-700">
+            Kelengkapan {completed} dari {totalFields}
+          </span>
+
+          <span className="font-semibold text-emerald-700">
+            {progress}%
+          </span>
         </div>
-        <Progress value={progress} aria-label={`${progress}% survei telah dilengkapi`} />
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-          <span className="flex items-center gap-1.5"><Clock3 className="size-4" aria-hidden="true" /> {formatWibDateTime(now)}</span>
-          {!isEdit && <span aria-live="polite">{draftSavedAt ? `Draf tersimpan pukul ${formatDraftTime(draftSavedAt)}` : "Draf akan tersimpan otomatis"}</span>}
+
+        <Progress value={progress} className="h-2" />
+
+        <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+
+          <span className="flex items-center gap-1">
+            <Clock3 className="size-3" />
+            {formatWibDateTime(now)}
+          </span>
+
+          {!isEdit && (
+            <span>
+              {draftSavedAt
+                ? "Draf tersimpan otomatis"
+                : "Draf akan tersimpan"}
+            </span>
+          )}
+
         </div>
       </div>
 
+      {/* FORM */}
+
       <Form {...form}>
-        <form onSubmit={handleSubmit(submit)} className="space-y-5" noValidate>
-          <FormSection icon={Building2} title="Identitas Outlet" description="Pilih outlet dari data yang dikelola master.">
-            <FormField control={control} name="outletId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nama outlet</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl><SelectTrigger className="h-11 text-base md:text-sm"><SelectValue placeholder="Pilih outlet" /></SelectTrigger></FormControl>
-                  <SelectContent>{outlets.filter((outlet) => outlet.status !== "nonaktif").map((outlet) => <SelectItem key={outlet.id} value={outlet.id}>{outlet.outletName}</SelectItem>)}</SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-            {selectedOutlet ? (
-              <dl className="mt-4 grid gap-x-6 gap-y-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-2">
-                <DataItem label="Nama PIC" value={selectedOutlet.picName} />
-                <DataItem label="Nama toko" value={selectedOutlet.storeName} />
-                <DataItem label="Nomor HP" value={selectedOutlet.phone} />
-                <DataItem label="Email" value={selectedOutlet.email} />
-                <div className="sm:col-span-2"><DataItem label="Alamat" value={selectedOutlet.address} /></div>
-              </dl>
-            ) : <p className="mt-3 flex items-center gap-2 text-sm text-slate-600"><Info className="size-4" aria-hidden="true" /> Detail outlet muncul setelah dipilih.</p>}
-          </FormSection>
+        <form
+          onSubmit={handleSubmit(submit)}
+          className="space-y-5"
+          noValidate
+        >
 
-          <FormSection icon={Info} title="Kondisi Lapangan" description="Jawab berdasarkan wawancara dan observasi di outlet.">
-            <div className="space-y-6">
-              {surveyQuestions.map((question, index) => (
-                <div key={question} className="grid gap-2 sm:grid-cols-[2rem_1fr]">
-                  <span className="grid size-8 place-items-center rounded-md bg-slate-900 text-sm font-semibold text-white" aria-hidden="true">{index + 1}</span>
-                  <div className="space-y-2">
-                    <Label htmlFor={`answer-${index}`} className={errors.answers?.[index] ? "text-red-700" : "text-slate-900"}>{question}</Label>
-                    <Textarea id={`answer-${index}`} rows={3} placeholder="Tulis jawaban hasil survei" className="min-h-24 resize-y text-base md:text-sm" aria-invalid={Boolean(errors.answers?.[index])} {...register(`answers.${index}`)} />
-                    {errors.answers?.[index] && <p className="text-sm font-medium text-red-700" role="alert">{errors.answers[index].message}</p>}
-                  </div>
+          {/* IDENTITAS OUTLET */}
+
+          <CardSection
+            icon={Building2}
+            title="Identitas Outlet"
+          >
+
+            <FormField
+              control={control}
+              name="outletId"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+
+                  <OutletCombobox
+                    outlets={outlets}
+                    value={field.value}
+                    onChange={(value) => {
+                      field.onChange(value);
+                    }}
+                    loading={loadingData}
+                  />
+
+                  <FormMessage />
+
+                </FormItem>
+              )}
+            />
+
+            {selectedOutlet && (
+              <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm border border-slate-100">
+
+                <p className="font-medium text-slate-900">
+                  {selectedOutlet.picName}
+                </p>
+
+                <p className="text-slate-500">
+                  {selectedOutlet.address}
+                </p>
+
+              </div>
+            )}
+
+          </CardSection>
+
+          {/* PERTANYAAN SURVEI */}
+
+          <CardSection
+            icon={Info}
+            title="Kondisi Lapangan"
+          >
+
+            <div className="divide-y divide-slate-100">
+
+              {questions.map((q, index) => (
+
+                <div
+                  key={q.id}
+                  className={`flex flex-col py-4 ${
+                    index === 0 ? "pt-0" : ""
+                  } ${
+                    index === questions.length - 1
+                      ? "pb-0"
+                      : ""
+                  }`}
+                >
+
+                  <Label
+                    className={`block text-sm font-medium leading-relaxed mb-3 ${
+                      errors.answers?.[index]
+                        ? "text-red-700"
+                        : "text-slate-900"
+                    }`}
+                  >
+
+                    <span className="text-emerald-700 mr-1.5">
+                      {index + 1}.
+                    </span>
+
+                    {q.text}
+
+                  </Label>
+
+                  {/* JAWABAN TEXT */}
+
+                  {q.type === "text" && (
+                    <Controller
+                      control={control}
+                      name={`answers.${index}`}
+                      render={({ field }) => (
+                        <Textarea
+                          {...field}
+                          value={field.value || ""}
+                          rows={2}
+                          placeholder="Tulis jawaban singkat..."
+                          className="w-full resize-y text-sm"
+                          aria-invalid={Boolean(
+                            errors.answers?.[index]
+                          )}
+                        />
+                      )}
+                    />
+                  )}
+
+                  {/* JAWABAN BOOLEAN */}
+
+                  {q.type === "boolean" && (
+                    <Select
+                      onValueChange={(value) =>
+                        setValue(
+                          `answers.${index}`,
+                          value,
+                          { shouldValidate: true }
+                        )
+                      }
+                      value={values?.answers?.[index] || ""}
+                    >
+
+                      <SelectTrigger
+                        className="w-full sm:w-[320px] h-10 text-sm"
+                        aria-invalid={Boolean(
+                          errors.answers?.[index]
+                        )}
+                      >
+                        <SelectValue placeholder="Pilih jawaban..." />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectItem value="Ya">
+                          Ya / Betul
+                        </SelectItem>
+
+                        <SelectItem value="Tidak">
+                          Tidak / Salah
+                        </SelectItem>
+                      </SelectContent>
+
+                    </Select>
+                  )}
+
+                  {/* JAWABAN PILIHAN */}
+
+                  {q.type === "choice" && (
+                    <Select
+                      onValueChange={(value) =>
+                        setValue(
+                          `answers.${index}`,
+                          value,
+                          { shouldValidate: true }
+                        )
+                      }
+                      value={values?.answers?.[index] || ""}
+                    >
+
+                      <SelectTrigger
+                        className="w-full sm:w-[320px] h-10 text-sm"
+                        aria-invalid={Boolean(
+                          errors.answers?.[index]
+                        )}
+                      >
+                        <SelectValue placeholder="Pilih opsi..." />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {(q.options || []).map((option, i) => (
+                          <SelectItem
+                            key={i}
+                            value={option}
+                          >
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+
+                    </Select>
+                  )}
+
+                  {errors.answers?.[index] && (
+                    <p className="mt-2 text-xs font-medium text-red-700">
+                      {errors.answers[index]?.message}
+                    </p>
+                  )}
+
                 </div>
+
               ))}
-            </div>
-          </FormSection>
 
-          <FormSection icon={MapPin} title="Bukti dan Konfirmasi" description="Ambil foto dengan lokasi, lalu konfirmasi anggota tim.">
-            <FormField control={control} name="evidence" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Foto dan lokasi</FormLabel>
-                <FormControl><ImageUploader value={field.value} onChange={(value) => field.onChange(value)} /></FormControl>
-                <FormDescription>Foto dikompresi di perangkat sebelum diunggah.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )} />
-            {distance !== null && <p className={`mt-3 rounded-md px-3 py-2 text-sm ${distance <= 250 ? "bg-emerald-50 text-emerald-950" : "bg-red-50 text-red-800"}`}>Jarak titik foto ke koordinat outlet: <strong className="tabular-nums">{Math.round(distance)} meter</strong>.</p>}
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Surveyor penanggung jawab</Label>
-                <div className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 bg-slate-100 px-3 text-sm font-medium text-slate-700"><User className="size-4" aria-hidden="true" />{responsibleUser.nama}</div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="teamMembers" className={errors.teamMembers ? "text-red-700" : undefined}>Anggota tim di lokasi</Label>
-                <Input id="teamMembers" placeholder="Nama anggota atau tulis Mandiri" className="h-11 text-base md:text-sm" aria-invalid={Boolean(errors.teamMembers)} {...register("teamMembers")} />
-                {errors.teamMembers && <p className="text-sm font-medium text-red-700" role="alert">{errors.teamMembers.message}</p>}
-              </div>
             </div>
 
-            <FormField control={control} name="attendanceConfirmed" render={({ field }) => (
-              <FormItem className="mt-4 rounded-lg border border-slate-300 p-4">
-                <div className="flex items-start gap-3">
-                  <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                  <div className="space-y-1">
-                    <FormLabel>Pernyataan kehadiran</FormLabel>
-                    <FormDescription>Saya menyatakan tim berada di lokasi outlet saat survei dilakukan dan data dapat dipertanggungjawabkan.</FormDescription>
-                    <FormMessage />
-                  </div>
+          </CardSection>
+
+          {/* BUKTI DAN KONFIRMASI */}
+
+          <CardSection
+            icon={MapPin}
+            title="Bukti dan Konfirmasi"
+          >
+
+            <FormField
+              control={control}
+              name="evidence"
+              render={({ field }) => (
+                <FormItem>
+
+                  <ImageUploader
+                    value={field.value}
+                    onChange={(value) => field.onChange(value)}
+                    disabled={isEdit && user?.role !== "master"}
+                  />
+
+                  {isEdit && user?.role !== "master" && (
+                    <p className="text-xs text-amber-600 font-medium mt-2 flex items-center gap-1">
+                      <ShieldCheck className="size-3.5" /> 
+                      Foto bukti asli bersifat permanen dan tidak dapat diganti saat pengajuan edit.
+                    </p>
+                  )}
+
+                  <FormMessage />
+
+                </FormItem>
+              )}
+            />
+
+            {/* JARAK OUTLET */}
+
+            {distance !== null && (
+              <p
+                className={`mt-3 rounded-md px-3 py-2 text-xs font-medium border ${
+                  distance <= 250
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-red-50 text-red-800 border-red-200"
+                }`}
+              >
+                Jarak titik foto ke outlet: {Math.round(distance)} meter.
+              </p>
+            )}
+
+            {/* SURVEYOR DAN ANGGOTA TIM */}
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+
+              <div className="space-y-1.5">
+
+                <Label className="text-xs text-slate-500">
+                  Surveyor
+                </Label>
+
+                <div className="flex min-h-10 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700">
+
+                  <User className="size-4 text-slate-400" />
+
+                  {responsibleUser?.nama || "-"}
+
                 </div>
-              </FormItem>
-            )} />
-          </FormSection>
+
+              </div>
+
+              <div className="space-y-1.5">
+
+                <Label
+                  className={`text-xs ${
+                    errors.teamMembers
+                      ? "text-red-700"
+                      : "text-slate-500"
+                  }`}
+                >
+                  Anggota Tim
+                </Label>
+
+                <Controller
+                  control={control}
+                  name="teamMembers"
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      value={field.value || ""}
+                      placeholder="Nama anggota / Mandiri"
+                      className="h-10 text-sm"
+                      aria-invalid={Boolean(
+                        errors.teamMembers
+                      )}
+                    />
+                  )}
+                />
+
+                {errors.teamMembers && (
+                  <p className="text-xs font-medium text-red-700">
+                    {errors.teamMembers.message}
+                  </p>
+                )}
+
+              </div>
+
+            </div>
+
+            {/* KONFIRMASI KEHADIRAN */}
+
+            <FormField
+              control={control}
+              name="attendanceConfirmed"
+              render={({ field }) => (
+                <FormItem className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+
+                  <div className="flex items-start gap-3">
+
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isEdit}
+                    />
+
+                    <div className="space-y-1">
+
+                      <FormLabel className="text-sm font-medium text-slate-900 cursor-pointer">
+                        Pernyataan Kehadiran
+                      </FormLabel>
+
+                      <FormDescription className="text-xs leading-relaxed text-slate-600">
+                        Saya menyatakan tim berada di lokasi outlet saat survei dilakukan.
+                      </FormDescription>
+
+                      <FormMessage />
+
+                    </div>
+
+                  </div>
+
+                </FormItem>
+              )}
+            />
+
+          </CardSection>
+
+          {/* ALASAN PERUBAHAN */}
 
           {isEdit && user.role !== "master" && (
-            <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 sm:p-6">
-              <Label htmlFor="changeReason" className={errors.changeReason ? "text-red-700" : "text-amber-950"}>Alasan pengajuan perubahan</Label>
-              <Textarea id="changeReason" rows={3} placeholder="Jelaskan bagian yang perlu dikoreksi" className="mt-2 bg-white text-base md:text-sm" aria-invalid={Boolean(errors.changeReason)} {...register("changeReason")} />
-              {errors.changeReason && <p className="mt-2 text-sm font-medium text-red-700" role="alert">{errors.changeReason.message}</p>}
-              <p className="mt-2 text-xs text-amber-950">Perubahan berlaku setelah disetujui master.</p>
-            </section>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+
+              <Label
+                className={`text-sm ${
+                  errors.changeReason
+                    ? "text-red-700"
+                    : "text-amber-900"
+                }`}
+              >
+                Alasan Perubahan
+              </Label>
+
+              <Controller
+                control={control}
+                name="changeReason"
+                render={({ field }) => (
+                  <Textarea
+                    {...field}
+                    value={field.value || ""}
+                    rows={2}
+                    placeholder="Jelaskan bagian yang dikoreksi..."
+                    className="mt-2 bg-white text-sm"
+                    aria-invalid={Boolean(
+                      errors.changeReason
+                    )}
+                  />
+                )}
+              />
+
+              {errors.changeReason && (
+                <p className="mt-2 text-xs font-medium text-red-700">
+                  {errors.changeReason.message}
+                </p>
+              )}
+
+            </div>
+
           )}
 
-          <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-lg md:bottom-4">
-            <Button type="button" variant="outline" onClick={cancel} className="flex-1">Batal</Button>
-            <Button type="submit" disabled={isSubmitting} className="flex-[2]">
-              {isSubmitting ? "Menyimpan" : !navigator.onLine && !isEdit ? "Simpan di Perangkat" : isEdit && user.role !== "master" ? "Ajukan Perubahan" : isEdit ? "Simpan Perubahan" : "Kirim Survei"}
+          {/* TOMBOL FORM */}
+
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(-1)}
+              className="h-12 sm:w-32"
+            >
+              Batal
             </Button>
+
+            <Button
+              type="submit"
+              disabled={isSubmitting || loadingData}
+              className="h-12 flex-1 bg-emerald-700 hover:bg-emerald-800 text-base"
+            >
+
+              {isSubmitting && (
+                <Loader2 className="mr-2 size-5 animate-spin" />
+              )}
+
+              {isSubmitting
+                ? "Menyimpan..."
+                : isEdit
+                  ? "Simpan Perubahan"
+                  : "Kirim Survei"}
+
+            </Button>
+
           </div>
+
         </form>
       </Form>
+
     </div>
   );
 }
 
-function valuesFromReport(report) {
-  return {
-    outletId: report.outletId,
-    answers: report.answers?.length === surveyQuestions.length ? report.answers : surveyQuestions.map(() => ""),
-    evidence: report.evidence || null,
-    teamMembers: report.presence?.teamMembers || "",
-    attendanceConfirmed: false,
-    changeReason: ""
+
+function OutletCombobox({
+  outlets = [],
+  value,
+  onChange,
+  loading = false
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const selectedOutlet = outlets.find(
+    (outlet) => String(outlet.id) === String(value)
+  );
+
+  const activeOutlets = outlets.filter((outlet) => {
+    const status = String(outlet.status || "")
+      .toLowerCase()
+      .trim();
+
+    return status !== "nonaktif";
+  });
+
+  // Pencarian berdasarkan beberapa kolom outlet
+  const filteredOutlets = activeOutlets.filter((outlet) => {
+    const keyword = search.toLowerCase().trim();
+
+    if (!keyword) return true;
+
+    const searchableText = [
+      outlet.outletName,
+      outlet.picName,
+      outlet.storeName,
+      outlet.address,
+      outlet.phone,
+      outlet.email
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return searchableText.includes(keyword);
+  });
+
+  const handleSelect = (outlet) => {
+    onChange(String(outlet.id));
+    setSearch("");
+    setOpen(false);
   };
+
+  return (
+    <div className="relative w-full">
+
+      {/* TOMBOL DROPDOWN */}
+
+      <button
+        type="button"
+        disabled={loading || activeOutlets.length === 0}
+        onClick={() => {
+          setOpen((prev) => !prev);
+          setSearch("");
+        }}
+        className={`
+          flex h-11 w-full items-center justify-between
+          rounded-lg border border-slate-200 bg-white
+          px-3 text-sm text-left shadow-sm
+          transition-all duration-200
+          hover:border-emerald-500
+          focus:outline-none focus:ring-2
+          focus:ring-emerald-500/20
+          disabled:cursor-not-allowed
+          disabled:opacity-50
+          ${open ? "border-emerald-500 ring-2 ring-emerald-500/20" : ""}
+        `}
+      >
+
+        <span className={`truncate ${
+          selectedOutlet
+            ? "font-medium text-slate-900"
+            : "text-slate-500"
+        }`}>
+          {loading
+            ? "Memuat data outlet..."
+            : selectedOutlet
+              ? selectedOutlet.outletName
+              : activeOutlets.length === 0
+                ? "Belum ada outlet tersedia"
+                : "Cari dan pilih outlet..."}
+        </span>
+
+        <svg
+          className={`ml-2 size-4 shrink-0 text-slate-400 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            d="m6 9 6 6 6-6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+
+      </button>
+
+      {/* DROPDOWN CONTENT */}
+
+      {open && (
+        <div className="
+          absolute left-0 top-full z-[100]
+          mt-2 w-full min-w-0
+          overflow-hidden rounded-xl
+          border border-slate-200
+          bg-white shadow-xl
+          animate-in fade-in zoom-in-95 duration-150
+        ">
+
+          {/* SEARCH INPUT */}
+
+          <div className="border-b border-slate-100 p-3">
+
+            <div className="
+              flex h-10 items-center gap-2
+              rounded-lg border border-slate-200
+              bg-slate-50 px-3
+              focus-within:border-emerald-500
+              focus-within:ring-2
+              focus-within:ring-emerald-500/10
+            ">
+
+              <svg
+                className="size-4 shrink-0 text-slate-400"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+
+              <input
+                autoFocus
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari nama outlet, PIC, alamat..."
+                className="
+                  h-full w-full min-w-0
+                  bg-transparent text-sm
+                  text-slate-900 outline-none
+                  placeholder:text-slate-400
+                "
+              />
+
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="shrink-0 text-slate-400 hover:text-slate-700"
+                  aria-label="Hapus pencarian"
+                >
+                  ✕
+                </button>
+              )}
+
+            </div>
+
+            <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+              <span>
+                {search
+                  ? "Hasil pencarian"
+                  : "Semua outlet aktif"}
+              </span>
+
+              <span>
+                {filteredOutlets.length} outlet
+              </span>
+            </div>
+
+          </div>
+
+          {/* LIST OUTLET */}
+
+          <div className="max-h-64 overflow-y-auto p-1.5">
+
+            {filteredOutlets.length > 0 ? (
+
+              filteredOutlets.map((outlet) => {
+
+                const isSelected =
+                  String(value) === String(outlet.id);
+
+                return (
+                  <button
+                    key={outlet.id}
+                    type="button"
+                    onClick={() => handleSelect(outlet)}
+                    className={`
+                      flex w-full items-start gap-3
+                      rounded-lg px-3 py-3
+                      text-left transition-colors
+                      hover:bg-emerald-50
+                      ${
+                        isSelected
+                          ? "bg-emerald-50"
+                          : "bg-white"
+                      }
+                    `}
+                  >
+
+                    {/* ICON OUTLET */}
+
+                    <div className={`
+                      flex size-9 shrink-0
+                      items-center justify-center
+                      rounded-lg
+                      ${
+                        isSelected
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-slate-100 text-slate-500"
+                      }
+                    `}>
+                      <svg
+                        className="size-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 9h.01M15 9h.01M9 12h.01M15 12h.01" />
+                      </svg>
+                    </div>
+
+                    {/* INFORMASI OUTLET */}
+
+                    <div className="min-w-0 flex-1">
+
+                      <p className={`
+                        truncate text-sm font-semibold
+                        ${
+                          isSelected
+                            ? "text-emerald-800"
+                            : "text-slate-800"
+                        }
+                      `}>
+                        {outlet.outletName}
+                      </p>
+
+                      {outlet.storeName && (
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {outlet.storeName}
+                        </p>
+                      )}
+
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+
+                        {outlet.picName && (
+                          <span>
+                            PIC: {outlet.picName}
+                          </span>
+                        )}
+
+                        {outlet.phone && (
+                          <span>
+                            {outlet.phone}
+                          </span>
+                        )}
+
+                      </div>
+
+                      {outlet.address && (
+                        <p className="mt-1 truncate text-[11px] text-slate-400">
+                          {outlet.address}
+                        </p>
+                      )}
+
+                    </div>
+
+                    {/* CHECK SELECTED */}
+
+                    {isSelected && (
+                      <svg
+                        className="mt-1 size-4 shrink-0 text-emerald-600"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <path
+                          d="m5 12 4 4L19 6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+
+                  </button>
+                );
+              })
+
+            ) : (
+
+              <div className="px-4 py-8 text-center">
+
+                <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full bg-slate-100">
+                  <svg
+                    className="size-5 text-slate-400"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                  </svg>
+                </div>
+
+                <p className="text-sm font-medium text-slate-700">
+                  Outlet tidak ditemukan
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Coba gunakan nama outlet, PIC, atau alamat lainnya.
+                </p>
+
+              </div>
+
+            )}
+
+          </div>
+
+          {/* FOOTER */}
+
+          <div className="
+            flex items-center justify-between
+            border-t border-slate-100
+            bg-slate-50 px-3 py-2
+          ">
+
+            <span className="text-[11px] text-slate-500">
+              {activeOutlets.length} outlet tersedia
+            </span>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setSearch("");
+              }}
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+            >
+              Tutup
+            </button>
+
+          </div>
+
+        </div>
+      )}
+
+      {!loading && activeOutlets.length === 0 && (
+        <p className="mt-2 text-xs text-red-600">
+          Data outlet belum tersedia atau seluruh outlet berstatus nonaktif.
+        </p>
+      )}
+
+    </div>
+  );
 }
 
-function FormSection({ icon: Icon, title, description, children }) {
+// ==========================================
+// CARD SECTION
+// ==========================================
+
+function CardSection({
+  icon: Icon,
+  title,
+  children
+}) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
-      <div className="mb-5 flex items-center gap-3 border-l-[3px] border-emerald-700 pl-3">
-        <Icon className="size-5 flex-none text-emerald-800" aria-hidden="true" />
-        <div><h2 className="font-semibold text-slate-950">{title}</h2><p className="text-sm text-slate-600">{description}</p></div>
+    <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
+
+      <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+
+        <Icon className="size-4 text-emerald-600" />
+
+        <h2 className="text-sm font-semibold text-slate-900">
+          {title}
+        </h2>
+
       </div>
+
       {children}
+
     </section>
   );
 }
 
-function DataItem({ label, value }) {
-  return <div><dt className="text-xs font-medium text-slate-600">{label}</dt><dd className="mt-0.5 break-words text-sm font-medium text-slate-950">{value || "Belum tersedia"}</dd></div>;
+// ==========================================
+// KONVERSI DATA LAPORAN KE FORM
+// ==========================================
+
+function valuesFromReport(report, length) {
+  return {
+    outletId: report.outletId,
+
+    answers:
+      report.answers?.length === length
+        ? report.answers
+        : Array(length).fill(""),
+
+    evidence: report.evidence || null,
+
+    teamMembers: report.presence?.teamMembers || "",
+
+    // Ubah menjadi true karena laporan ini sudah pernah disubmit
+    attendanceConfirmed: true,
+
+    changeReason: ""
+  };
 }
 
-function SuccessState({ result, onAgain }) {
+// ==========================================
+// HALAMAN SUKSES
+// ==========================================
+
+function SuccessState({
+  result,
+  onAgain
+}) {
   return (
-    <div className="mx-auto max-w-lg rounded-xl border-l-[3px] border-emerald-700 bg-white p-6 text-center sm:p-8">
-      {result.queued ? <ShieldCheck className="mx-auto size-10 text-amber-700" aria-hidden="true" /> : <CheckCircle2 className="mx-auto size-10 text-emerald-700" aria-hidden="true" />}
-      <h1 className="mt-4 text-xl font-semibold text-slate-950">{result.queued ? "Survei tersimpan di perangkat" : "Survei berhasil dikirim"}</h1>
-      <p className="mt-2 text-sm text-slate-600">{result.queued ? "Data akan dikirim secara berurutan saat koneksi kembali." : "Laporan telah tersimpan dan dapat dibuka dari halaman Laporan."}</p>
+    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm mt-10">
+
+      {result.queued ? (
+        <ShieldCheck className="mx-auto size-12 text-amber-600" />
+      ) : (
+        <CheckCircle2 className="mx-auto size-12 text-emerald-600" />
+      )}
+
+      <h1 className="mt-4 text-xl font-bold text-slate-950">
+        {result.queued
+          ? "Tersimpan di Perangkat"
+          : "Survei Berhasil Dikirim"}
+      </h1>
+
+      <p className="mt-2 text-sm text-slate-600">
+        {result.queued
+          ? "Data akan dikirim otomatis saat koneksi kembali."
+          : "Laporan telah masuk ke database dan dapat dilihat di halaman Laporan."}
+      </p>
+
       <div className="mt-6 grid gap-2 sm:grid-cols-2">
-        <Button asChild variant="outline"><Link to="/reports">Lihat Laporan</Link></Button>
-        <Button type="button" onClick={onAgain}>Buat Survei Lagi</Button>
+
+        <Button
+          asChild
+          variant="outline"
+          className="h-11"
+        >
+          <Link to="/reports">
+            Lihat Laporan
+          </Link>
+        </Button>
+
+        <Button
+          type="button"
+          onClick={onAgain}
+          className="h-11"
+        >
+          Buat Survei Lagi
+        </Button>
+
       </div>
+
     </div>
   );
 }
+
+// ==========================================
+// LAPORAN TIDAK DITEMUKAN
+// ==========================================
 
 function MissingReport() {
   return (
-    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-8 text-center">
-      <h1 className="font-semibold text-slate-950">Laporan tidak ditemukan</h1>
-      <p className="mt-1 text-sm text-slate-600">Data mungkin telah dihapus atau tidak dapat diakses oleh akun ini.</p>
-      <Button asChild className="mt-4"><Link to="/reports">Kembali ke Laporan</Link></Button>
+    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-8 text-center mt-10">
+
+      <h1 className="font-semibold text-slate-950">
+        Laporan tidak ditemukan
+      </h1>
+
+      <p className="mt-1 text-sm text-slate-600">
+        Data mungkin telah dihapus atau Anda tidak memiliki akses.
+      </p>
+
+      <Button
+        asChild
+        className="mt-4"
+      >
+        <Link to="/reports">
+          Kembali ke Laporan
+        </Link>
+      </Button>
+
     </div>
   );
-}
-
-function formatDraftTime(value) {
-  return new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
 }

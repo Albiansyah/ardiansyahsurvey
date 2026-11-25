@@ -95,6 +95,15 @@ const mapLog = (row) => ({
   createdAt: row.created_at
 });
 
+const mapQuestion = (row) => ({
+  id: row.id,
+  text: row.question_text,
+  type: row.question_type,
+  options: row.options || [],
+  orderIndex: row.order_index,
+  isActive: row.is_active
+});
+
 const outletPayload = (outlet) => ({
   outlet_name: outlet.outletName.trim(),
   pic_name: outlet.picName.trim(),
@@ -126,6 +135,7 @@ export const useStore = create((set, get) => ({
   targets: [],
   changeRequests: [],
   auditLogs: [],
+  questions: [], // State untuk pertanyaan dinamis
   hydrated: false,
   loadingData: false,
   storageError: null,
@@ -166,7 +176,17 @@ export const useStore = create((set, get) => ({
 
   logout: async () => {
     await supabaseAuth.signOut();
-    set({ user: null, surveyors: [], reports: [], outlets: [], targets: [], changeRequests: [], auditLogs: [], storageError: null });
+    set({ 
+      user: null, 
+      surveyors: [], 
+      reports: [], 
+      outlets: [], 
+      targets: [], 
+      changeRequests: [], 
+      auditLogs: [], 
+      questions: [], 
+      storageError: null 
+    });
   },
 
   loadData: async () => {
@@ -174,20 +194,22 @@ export const useStore = create((set, get) => ({
     if (!user) return;
     set({ loadingData: true, storageError: null });
     try {
-      const [profileRows, outletRows, reportRows, targetRows, requestRows, logRows] = await Promise.all([
+      const [profileRows, outletRows, reportRows, targetRows, requestRows, logRows, questionRows] = await Promise.all([
         restRequest("profiles", { query: "select=*&order=full_name.asc" }),
         restRequest("outlets", { query: "select=*&order=outlet_name.asc" }),
         restRequest("survey_reports", { query: "select=*,outlet:outlets(*)&order=created_at.desc" }),
         restRequest("survey_targets", { query: "select=*&order=period_start.desc" }),
         restRequest("change_requests", { query: "select=*&order=created_at.desc" }),
-        restRequest("audit_logs", { query: "select=*&order=created_at.desc&limit=500" })
+        restRequest("audit_logs", { query: "select=*&order=created_at.desc&limit=500" }),
+        restRequest("survey_questions", { query: "select=*&is_active=eq.true&order=order_index.asc" })
       ]);
+      
       const profiles = profileRows.map(mapProfile);
       const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
-      // Tetap kompatibel sebelum dan sesudah migrasi soft-delete. PostgREST
-      // tidak mengembalikan properti ini sebelum kolom tersedia.
+      
       const activeReportRows = reportRows.filter((row) => !row.deleted_at);
       const reportsWithUrls = await withEvidenceUrls(activeReportRows);
+      
       set({
         surveyors: profiles.filter((profile) => profile.backendRole === "surveyor"),
         outlets: outletRows.map(mapOutlet),
@@ -195,6 +217,7 @@ export const useStore = create((set, get) => ({
         targets: targetRows.map((row) => mapTarget(row, profileMap)),
         changeRequests: requestRows.map(mapRequest),
         auditLogs: logRows.map(mapLog),
+        questions: questionRows.map(mapQuestion), // Simpan pertanyaan ke state
         loadingData: false,
         storageError: null
       });
@@ -234,6 +257,7 @@ export const useStore = create((set, get) => ({
     const evidencePath = data.evidence?.dataUrl?.startsWith("data:")
       ? await uploadEvidence(existing?.userId || user.id, data.evidence)
       : data.evidence?.path || existing?.evidencePath;
+      
     await restRequest("survey_reports", {
       method: "PATCH",
       query: `id=eq.${id}`,
@@ -345,7 +369,52 @@ export const useStore = create((set, get) => ({
     const report = get().reports.find((item) => item.id === reportId);
     if (!report?.evidencePath) return null;
     const dataUrl = await createEvidenceUrl(report.evidencePath);
-    set((state) => ({ reports: state.reports.map((item) => item.id === reportId ? { ...item, evidence: { ...item.evidence, dataUrl } } : item) }));
+    set((state) => ({ 
+      reports: state.reports.map((item) => item.id === reportId ? { ...item, evidence: { ...item.evidence, dataUrl } } : item) 
+    }));
     return dataUrl;
+  },
+
+  // ==========================================
+  // FUNGSI CRUD PERTANYAAN SURVEI DINAMIS
+  // ==========================================
+  fetchQuestions: async () => {
+    const rows = await restRequest("survey_questions", { query: "select=*&order=order_index.asc" });
+    set({ questions: rows.map(mapQuestion) });
+  },
+
+  addQuestion: async (payload) => {
+    await restRequest("survey_questions", { 
+      method: "POST", 
+      body: { 
+        question_text: payload.text, 
+        question_type: payload.type, 
+        options: payload.options, 
+        order_index: payload.orderIndex 
+      } 
+    });
+    await get().fetchQuestions();
+  },
+
+  updateQuestion: async (id, payload) => {
+    await restRequest("survey_questions", { 
+      method: "PATCH", 
+      query: `id=eq.${id}`, 
+      body: { 
+        question_text: payload.text, 
+        question_type: payload.type, 
+        options: payload.options 
+      } 
+    });
+    await get().fetchQuestions();
+  },
+
+  deleteQuestion: async (id) => {
+    await restRequest("survey_questions", { 
+      method: "DELETE", 
+      query: `id=eq.${id}`, 
+      prefer: "return=minimal" 
+    });
+    await get().fetchQuestions();
   }
 }));

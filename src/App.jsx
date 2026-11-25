@@ -18,8 +18,11 @@ const Profile = lazy(() => import("@/pages/Profile"));
 const ReportDetail = lazy(() => import("@/pages/ReportDetail"));
 const Reports = lazy(() => import("@/pages/Reports"));
 const SurveyForm = lazy(() => import("@/pages/SurveyForm"));
-const Surveyors = lazy(() => import("@/pages/Surveyors"));
 const Targets = lazy(() => import("@/pages/Targets"));
+
+const SurveyorList = lazy(() => import("@/pages/SurveyorList"));
+const SurveyorCreate = lazy(() => import("@/pages/SurveyorCreate"));
+const Questions = lazy(() => import("@/pages/Questions")); // <-- Tambahan: Import halaman Questions
 
 function SurveyFormRoute() {
   const { id } = useParams();
@@ -83,7 +86,11 @@ export default function App() {
               <Route path="/history" element={<History />} />
               <Route path="/outlets" element={<MasterOnly><Outlets /></MasterOnly>} />
               <Route path="/targets" element={<MasterOnly><Targets /></MasterOnly>} />
-              <Route path="/surveyors" element={<MasterOnly><Surveyors /></MasterOnly>} />
+              
+              <Route path="/surveyors" element={<MasterOnly><SurveyorList /></MasterOnly>} />
+              <Route path="/surveyors/tambah" element={<MasterOnly><SurveyorCreate /></MasterOnly>} />
+              <Route path="/questions" element={<MasterOnly><Questions /></MasterOnly>} /> {/* <-- Tambahan: Rute Questions */}
+              
               <Route path="/profile" element={<Profile />} />
               <Route path="*" element={<NotFound />} />
             </Routes></Suspense>
