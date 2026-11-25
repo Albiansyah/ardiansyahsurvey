@@ -88,7 +88,9 @@ export default function Login() {
                 id="email" 
                 required 
                 type="email" 
+                inputMode="email"
                 autoComplete="email" 
+                autoCapitalize="off"
                 value={email} 
                 onChange={(event) => setEmail(event.target.value)} 
                 placeholder="nama@email.com" 

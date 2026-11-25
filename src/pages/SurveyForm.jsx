@@ -638,6 +638,7 @@ export default function SurveyForm() {
                           aria-invalid={Boolean(
                             errors.answers?.[index]
                           )}
+                          autoCapitalize="sentences"
                         />
                       )}
                     />
@@ -816,10 +817,13 @@ export default function SurveyForm() {
                       {...field}
                       value={field.value || ""}
                       placeholder="Nama anggota / Mandiri"
-                      className="h-10 text-sm"
+                      className="h-10 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                       aria-invalid={Boolean(
                         errors.teamMembers
                       )}
+                      autoComplete="off"
+                      autoCapitalize="words"
+                      disabled={isEdit && user?.role !== "master"}
                     />
                   )}
                 />
@@ -827,6 +831,11 @@ export default function SurveyForm() {
                 {errors.teamMembers && (
                   <p className="text-xs font-medium text-red-700">
                     {errors.teamMembers.message}
+                  </p>
+                )}
+                {!errors.teamMembers && isEdit && user?.role !== "master" && (
+                  <p className="text-[10px] text-amber-600 font-medium">
+                    Anggota tim tidak dapat diubah saat pengajuan edit.
                   </p>
                 )}
 
@@ -901,6 +910,7 @@ export default function SurveyForm() {
                     aria-invalid={Boolean(
                       errors.changeReason
                     )}
+                    autoCapitalize="sentences"
                   />
                 )}
               />
